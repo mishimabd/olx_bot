@@ -8,8 +8,9 @@ async def advertise_buttons(update: Update, context: CallbackContext) -> None:
     user = update.message.from_user
     buttons = [
         [KeyboardButton("Get my advertises")],
-        [KeyboardButton("Get advert statistics")],
-        [KeyboardButton("Update my advertise")],
+        [KeyboardButton("Create Advertise")],
+        [KeyboardButton("Get User Information")],
+        [KeyboardButton("Get Advertise Statistics")],
         [KeyboardButton("Обратно в главную")]
     ]
     reply_markup = ReplyKeyboardMarkup(buttons, resize_keyboard=True)
@@ -34,19 +35,13 @@ async def secret_settings_buttons(update: Update, context: CallbackContext) -> N
 
 
 async def start_button(update: Update, context: CallbackContext) -> None:
-    auth_url = (f"https://www.olx.kz/oauth/authorize/"
-                f"?client_id=200166"
-                f"&response_type=code"
-                f"&scope=read+write+v2"
-                f"&redirect_uri=http://127.0.0.1:5000")
-    await update.message.reply_text(f"Please visit the following URL to authorize:\n{auth_url}")
     context.user_data["is_text_for_adding"] = False
     user = update.message.from_user
     buttons = [
         [KeyboardButton("OLX API")],
         [KeyboardButton("Secret Key Settings")]
     ]
-    print(context.user_data["is_text_for_adding"])
+
     reply_markup = ReplyKeyboardMarkup(buttons, resize_keyboard=True)
     await update.message.reply_text(
         f"Привет, {user.first_name}! Я бот для размещения рекламы на Olx.kz. Выберите действие:",
