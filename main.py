@@ -44,7 +44,7 @@ AUTH_URL = "https://www.olx.kz/oauth/authorize/"
 TELEGRAM_BOT_TOKEN = "7051155336:AAEGyPRtiNELXFL5t2i2DNI5lRhLRJeSQMo"
 
 # Initialize Redis client
-redis_client = redis.StrictRedis(host='localhost', port=6379, db=0)
+redis_client = redis.StrictRedis(host='185.4.180.8', port=6379, db=0)
 
 # Initialize Flask app and blueprint
 app = Flask(__name__)
