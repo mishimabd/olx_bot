@@ -63,6 +63,7 @@ def oauth_callback():
             'code': code,
             'client_id': CLIENT_ID,
             'client_secret': CLIENT_SECRET,
+            'redirect_uri': '185.4.180.8'
         }
         print(data)
         response = requests.post(TOKEN_URL, data=data)
