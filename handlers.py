@@ -1,7 +1,7 @@
 import asyncpg
 from telegram import Update
 from telegram.ext import CallbackContext
-from service_advertise import (get_advert_statistics,get_authenticated_user,
+from service_advertise import (get_statistic_for_advertise,get_authenticated_user,
                                check_my_balance, get_my_advertises, create_adv)
 from buttons import advertise_buttons, secret_settings_buttons, start_button, olx_api_buttons
 from service_secret_key import get_secret_keys, add_secret_key, save_secret_key
@@ -47,11 +47,11 @@ async def handle_action_settings(update: Update, context: CallbackContext) -> No
 
 async def handle_action_advertises(update: Update, context: CallbackContext) -> None:
     user_choice = update.message.text
-    if user_choice == "Get my advertises":
+    if user_choice == "Все объявления":
         await get_my_advertises(update, context)
-    elif user_choice == "Get Advertise Statistics":
-        await get_advert_statistics(update, context)
-    elif user_choice == "Get User Information":
+    elif user_choice == "Статистика":
+        await get_statistic_for_advertise(update, context)
+    elif user_choice == "Информация про пользователя":
         await get_authenticated_user(update, context)
     elif user_choice == "Обратно в главную":
         await start_button(update, context)
@@ -67,7 +67,7 @@ async def handle_action_main(update: Update, context: CallbackContext) -> None:
 
 async def handle_action_olx_api(update: Update, context: CallbackContext) -> None:
     user_choice = update.message.text
-    if user_choice == "Advertises":
+    if user_choice == "Объявления":
         await advertise_buttons(update, context)
-    elif user_choice == "My balance":
+    elif user_choice == "Мой баланс":
         await check_my_balance(update, context)

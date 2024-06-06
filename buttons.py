@@ -7,10 +7,10 @@ TELEGRAM_BOT_TOKEN = "7051155336:AAEGyPRtiNELXFL5t2i2DNI5lRhLRJeSQMo"
 async def advertise_buttons(update: Update, context: CallbackContext) -> None:
     user = update.message.from_user
     buttons = [
-        [KeyboardButton("Get my advertises")],
-        [KeyboardButton("Create Advertise")],
-        [KeyboardButton("Get User Information")],
-        [KeyboardButton("Get Advertise Statistics")],
+        [KeyboardButton("Все объявления")],
+        [KeyboardButton("Создать объявление")],
+        [KeyboardButton("Создать объявления по файлу")],
+        [KeyboardButton("Статистика")],
         [KeyboardButton("Обратно в главную")]
     ]
     reply_markup = ReplyKeyboardMarkup(buttons, resize_keyboard=True)
@@ -39,7 +39,7 @@ async def start_button(update: Update, context: CallbackContext) -> None:
     user = update.message.from_user
     buttons = [
         [KeyboardButton("OLX API")],
-        [KeyboardButton("Secret Key Settings")]
+        [KeyboardButton("Информация про пользователя")]
     ]
 
     reply_markup = ReplyKeyboardMarkup(buttons, resize_keyboard=True)
@@ -52,8 +52,10 @@ async def start_button(update: Update, context: CallbackContext) -> None:
 async def olx_api_buttons(update: Update, context: CallbackContext) -> None:
     user = update.message.from_user
     buttons = [
-        [KeyboardButton("Advertises")],
-        [KeyboardButton("My balance")],
+        [KeyboardButton("Объявления")],
+        [KeyboardButton("История затрат")],
+        [KeyboardButton("Остаток пакетов")],
+        [KeyboardButton("Мой баланс")],
         [KeyboardButton("Обратно в главную")]
     ]
     reply_markup = ReplyKeyboardMarkup(buttons, resize_keyboard=True)

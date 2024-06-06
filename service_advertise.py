@@ -1,24 +1,44 @@
 import asyncio
-import json
-import re
+import base64
+import logging
+import os
+from datetime import datetime, timedelta
+import pandas as pd
 import asyncpg
 import redis
 import requests
+from apscheduler.schedulers.background import BackgroundScheduler
+from apscheduler.triggers.date import DateTrigger
 from telegram import Update, Message, InlineKeyboardButton, InlineKeyboardMarkup
 from telegram.ext import ContextTypes, CallbackContext, Application, CommandHandler, MessageHandler, filters, \
     ConversationHandler
 
 import utils
-
+scheduler = BackgroundScheduler()
+scheduler.start()
 redis_client = redis.StrictRedis(host='localhost', port=6379, db=0)
 
 token_client = utils.get_token_client()
-FIRST, SECOND, THIRD = range(3)
 
+FIRST, SECOND, THIRD, FOURTH, FIFTH,SIXTH, DATETIME = range(7)
+FILE = range(1)
 
 async def get_pool():
     return await asyncpg.create_pool(user='postgres', password='mishimabd',
                                      database='olx_bot', host='localhost')
+
+
+def run_async(coroutine, *args):
+    # Create a new event loop for this thread
+    loop = asyncio.new_event_loop()
+    asyncio.set_event_loop(loop)
+
+    try:
+        # Run the coroutine in the new event loop
+        loop.run_until_complete(coroutine(*args))
+    finally:
+        # Close the event loop when done
+        loop.close()
 
 
 async def help_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
@@ -57,23 +77,28 @@ async def check_my_balance(update: Update, context: ContextTypes.DEFAULT_TYPE) -
             refund_amount = response_data["data"]["refund"]
 
             message = (
-                f"Your balance details are as follows:\n"
-                f"Sum: {sum_amount}\n"
-                f"Wallet: {wallet_amount}\n"
-                f"Bonus: {bonus_amount}\n"
-                f"Refund: {refund_amount}"
+                f"Ваши детали баланса следующие:\n"
+                f"Сумма: {sum_amount}\n"
+                f"Кошелек: {wallet_amount}\n"
+                f"Бонус: {bonus_amount}\n"
+                f"Возврат: {refund_amount}"
             )
 
             await update.message.reply_text(message)
         elif response.status_code == 401:
             auth_url = (
-                f"https://www.olx.kz/oauth/authorize/?client_id=200166&response_type=code&state=x93ld3v&scope=read+write+v2")
+                f"https://www.olx.kz/oauth/authorize/?client_id=200166&response_type=code&state=x93ld3v&scope=read"
+                f"+write+v2")
             await update.message.reply_text(
-                f"You are not authorized. Please visit the following URL to authorize:\n{auth_url}")
+                f"Вы не авторизованы. Пожалуйста перейдите по ссылке:\n{auth_url}")
         else:
             await update.message.reply_text(f"Error: {response.json()}")
     else:
-        await update.message.reply_text("Authorization token not found. Please authenticate first.")
+        auth_url = (
+            f"https://www.olx.kz/oauth/authorize/?client_id=200166&response_type=code&state=x93ld3v&scope=read"
+            f"+write+v2")
+        await update.message.reply_text(
+                f"Вы не авторизованы. Пожалуйста перейдите по ссылке:\n{auth_url}")
 
 
 async def get_authenticated_user(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
@@ -98,23 +123,33 @@ async def get_authenticated_user(update: Update, context: ContextTypes.DEFAULT_T
             last_login_at = user_data.get('last_login_at', 'N/A')
 
             message = (
-                f"Your name is: {user_name}\n"
-                f"Your email is: {user_email}\n"
-                f"Account status: {user_status}\n"
-                f"Account created at: {created_at}\n"
-                f"Last login at: {last_login_at}"
+                f"Ваше имя: {user_name}\n"
+                f"Ваш email: {user_email}\n"
+                f"Статус аккаунта: {user_status}\n"
+                f"Аккаунт создан: {created_at}\n"
+                f"Последний вход: {last_login_at}"
             )
             await update.message.reply_text(message)
+        elif response.status_code == 401:
+            auth_url = (
+                f"https://www.olx.kz/oauth/authorize/?client_id=200166&response_type=code&state=x93ld3v&scope=read"
+                f"+write+v2")
+            await update.message.reply_text(
+                f"Вы не авторизованы. Пожалуйста перейдите по ссылке:\n{auth_url}")
         else:
             await update.message.reply_text(f"Error: {response.status_code}")
     else:
-        await update.message.reply_text("Authorization token not found. Please authenticate first.")
+        auth_url = (
+            f"https://www.olx.kz/oauth/authorize/?client_id=200166&response_type=code&state=x93ld3v&scope=read"
+            f"+write+v2")
+        await update.message.reply_text(
+                f"Вы не авторизованы. Пожалуйста перейдите по ссылке:\n{auth_url}")
 
 
 async def get_my_advertises(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     chat_id = update.message.chat_id
     token_auth = redis_client.get(f'access_token:{chat_id}')
-
+    print(token_auth)
     if token_auth:
         token_auth = token_auth.decode('utf-8')  # Decode the byte string to a standard string
         url = "https://www.olx.kz/api/partner/adverts"
@@ -124,7 +159,6 @@ async def get_my_advertises(update: Update, context: ContextTypes.DEFAULT_TYPE) 
             "Version": "2.0"
         }
         response = requests.get(url, headers=headers)
-
         if response.status_code == 200:
             ad_data = response.json().get('data', [])
             if ad_data:
@@ -141,34 +175,162 @@ async def get_my_advertises(update: Update, context: ContextTypes.DEFAULT_TYPE) 
                     ad_valid_to = ad.get('valid_to', 'N/A')
                     ad_url = ad.get('url', 'N/A')
 
+                    images = ad.get('images', [])
+                    ad_image_url = images[0].get('url', '') if images else ''
+
                     message = (
-                        f"Ad Title: {ad_title}\n"
-                        f"Description: {ad_description}\n"
+                        f"Название: {ad_title}\n"
+                        f"Описание: {ad_description}\n"
                         f"Цена вашего объявления: {ad_price_value} {ad_price_currency}\n"
-                        f"Category ID: {ad_category_id}\n"
-                        f"Contact Name: {ad_contact_name}\n"
-                        f"Contact Phone: {ad_contact_phone}\n"
-                        f"City ID: {ad_location_city_id}\n"
-                        f"Создано At: {ad_created_at}\n"
-                        f"Valid To: {ad_valid_to}\n"
-                        f"URL: {ad_url}\n"
+                        f"Автор объявления: {ad_contact_name}\n"
+                        f"Создано: {ad_created_at}\n"
+                        f"Срок до: {ad_valid_to}\n"
+                        f"Ссылка: {ad_url}\n"
                     )
-                    await update.message.reply_text(message)
+
+                    if ad_image_url:
+                        image_response = requests.get(ad_image_url)
+                        if image_response.status_code == 200:
+                            await context.bot.send_photo(chat_id=chat_id, photo=image_response.content, caption=message)
+                        else:
+                            await update.message.reply_text("Failed to load image, here are the details:\n" + message)
+                    else:
+                        await update.message.reply_text("Нет картинки\n" + message)
             else:
-                await update.message.reply_text("No advertisements found.")
+                await update.message.reply_text("Не найдено.")
+        elif response.status_code == 401:
+            auth_url = (
+                f"https://www.olx.kz/oauth/authorize/?client_id=200166&response_type=code&state=x93ld3v&scope=read"
+                f"+write+v2")
+            await update.message.reply_text(
+                f"Вы не авторизованы. Пожалуйста перейдите по ссылке:\n{auth_url}")
         else:
             await update.message.reply_text(f"Error: {response.status_code}")
     else:
-        await update.message.reply_text("Authorization token not found. Please authenticate first.")
+        auth_url = (
+            f"https://www.olx.kz/oauth/authorize/?client_id=200166&response_type=code&state=x93ld3v&scope=read"
+            f"+write+v2")
+        await update.message.reply_text(
+                f"Вы не авторизованы. Пожалуйста перейдите по ссылке:\n{auth_url}")
 
 
-async def get_advert_statistics(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
-    if update.message:  # This condition ensures the function handles messages
-        chat_id = update.message.chat_id
-        print("I am in advertise statistics")
-        token_auth = redis_client.get(f'access_token:{chat_id}')
+async def billing_history(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    chat_id = update.message.chat_id
+    token_auth = redis_client.get(f'access_token:{chat_id}')
+
+    if token_auth:
+        token_auth = token_auth.decode('utf-8')  # Decode the byte string to a standard string
+
+        url = "https://www.olx.kz/api/partner/users/me/billing"
+        headers = {
+            "Authorization": f"Bearer {token_auth}",
+            "Version": "2.0",
+            "Content-Type": "application/x-www-form-urlencoded",
+            "User-Agent": "PostmanRuntime/7.39.0",
+            "Accept": "*/*",
+            "Accept-Encoding": "gzip, deflate, br",
+            "Connection": "keep-alive"
+        }
+
+        response = requests.get(url, headers=headers)
+
+        if response.status_code == 200:
+            response_data = response.json()
+            billing_entries = response_data.get('data', [])
+
+            if billing_entries:
+                message = "История биллинга:\n\n"
+                for entry in billing_entries:
+                    date = entry.get('date', 'N/A')
+                    formatted_date = datetime.strptime(date, '%Y-%m-%d %H:%M:%S').strftime('%d-%m-%Y %H:%M:%S')
+                    message += (
+                        f"Название: {entry.get('name', 'N/A')}\n"
+                        f"Дата: {formatted_date}\n"
+                        f"Цена: {entry.get('price', 'N/A')}\n\n"
+                    )
+            else:
+                message = "История биллинга пуста."
+
+            await update.message.reply_text(message)
+
+        elif response.status_code == 401:
+            auth_url = (
+                f"https://www.olx.kz/oauth/authorize/?client_id=200166&response_type=code&state=x93ld3v&scope=read"
+                f"+write+v2")
+            await update.message.reply_text(
+                f"Вы не авторизованы. Пожалуйста, перейдите по ссылке:\n{auth_url}")
+        else:
+            await update.message.reply_text(f"Ошибка: {response.json().get('message', 'Неизвестная ошибка')}")
+
+    else:
+        auth_url = (
+            f"https://www.olx.kz/oauth/authorize/?client_id=200166&response_type=code&state=x93ld3v&scope=read"
+            f"+write+v2")
+        await update.message.reply_text(
+            f"Вы не авторизованы. Пожалуйста, перейдите по ссылке:\n{auth_url}")
+
+
+async def packets_left(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    chat_id = update.message.chat_id
+    token_auth = redis_client.get(f'access_token:{chat_id}')
+
+    if token_auth:
+        token_auth = token_auth.decode('utf-8')  # Decode the byte string to a standard string
+
+        url = "https://www.olx.kz/api/partner/users/me/packets"
+        headers = {
+            "Authorization": f"Bearer {token_auth}",
+            "Version": "2.0",
+            "Content-Type": "application/x-www-form-urlencoded",
+            "User-Agent": "PostmanRuntime/7.39.0",
+            "Accept": "*/*",
+            "Accept-Encoding": "gzip, deflate, br",
+            "Connection": "keep-alive"
+        }
+
+        response = requests.get(url, headers=headers)
+
+        if response.status_code == 200:
+            response_data = response.json()
+            packets_data = response_data.get('data', [])
+
+            if packets_data:
+                message = "Оставшиеся пакеты:\n\n"
+                for packet in packets_data:
+                    message += (
+                        f"Название пакета: {packet.get('name', 'N/A')}\n"
+                        f"Осталось размещений: {packet.get('left', 'N/A')}\n"
+                        f"Активен до: {packet.get('active_to', 'N/A')}\n\n"
+                    )
+            else:
+                message = "Нет активных пакетов."
+
+            await update.message.reply_text(message)
+
+        elif response.status_code == 401:
+            auth_url = (
+                f"https://www.olx.kz/oauth/authorize/?client_id=200166&response_type=code&state=x93ld3v&scope=read"
+                f"+write+v2")
+            await update.message.reply_text(
+                f"Вы не авторизованы. Пожалуйста, перейдите по ссылке:\n{auth_url}")
+        else:
+            await update.message.reply_text(f"Ошибка: {response.json().get('message', 'Неизвестная ошибка')}")
+
+    else:
+        auth_url = (
+            f"https://www.olx.kz/oauth/authorize/?client_id=200166&response_type=code&state=x93ld3v&scope=read"
+            f"+write+v2")
+        await update.message.reply_text(
+            f"Вы не авторизованы. Пожалуйста, перейдите по ссылке:\n{auth_url}")
+
+
+def check_advertises(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    chat_ids = redis_client.keys('access_token:*')
+    for chat_id_key in chat_ids:
+        chat_id = chat_id_key.split(b':')[1].decode('utf-8')
+        token_auth = redis_client.get(chat_id_key)
         if token_auth:
-            token_auth = token_auth.decode('utf-8')  # Decode the byte string to a standard string
+            token_auth = token_auth.decode('utf-8')
             url = "https://www.olx.kz/api/partner/adverts"
             headers = {
                 "Authorization": f"Bearer {token_auth}",
@@ -179,80 +341,120 @@ async def get_advert_statistics(update: Update, context: ContextTypes.DEFAULT_TY
             if response.status_code == 200:
                 ad_data = response.json().get('data', [])
                 if ad_data:
-                    keyboard = []
                     for ad in ad_data:
-                        ad_id = ad.get('id', 'N/A')
-                        ad_title = ad.get('title', 'N/A')
-                        button = InlineKeyboardButton(ad_title, callback_data=f"select_advertise:{ad_id}")
-                        keyboard.append([button])
-                    reply_markup = InlineKeyboardMarkup(keyboard)
-                    await update.message.reply_text("Select an advertisement:", reply_markup=reply_markup)
-                else:
-                    await update.message.reply_text("No advertisements found.")
+                        ad_valid_to = ad.get('valid_to', 'N/A')
+                        ad_valid_to_dt = datetime.strptime(ad_valid_to, '%Y-%m-%d %H:%M:%S')
+                        if datetime.now(ad_valid_to_dt.tzinfo) + timedelta(days=25) >= ad_valid_to_dt:
+                            message = (
+                                f"Айди: {ad.get('id', 'N/A')}\n"
+                                f"Название: {ad.get('title', 'N/A')}\n"
+                                f"Описание: {ad.get('description', 'N/A')}\n"
+                                f"Срок до: {ad_valid_to}\n"
+                                f"Ссылка: {ad.get('url', 'N/A')}\n"
+                            )
+                            logging.info(message)
+                            # advert_id = ad.get('id', 'N/A')
+                            # if advert_id != 'N/A':
+                            #     post_url = f"https://www.olx.kz/api/partner/adverts/{advert_id}/paid-features"
+                            #     post_body = {
+                            #         "payment_method": "account",
+                            #         "code": "pushup"
+                            #     }
+                            #     post_response = requests.post(post_url, headers=headers, json=post_body)
+                            #     if post_response.status_code == 200:
+                            #         logging.info(f"Successfully sent paid feature request for advert ID: {advert_id}")
+                            #     else:
+                            #         logging.error(
+                            #             f"Failed to send paid feature request for advert ID: {advert_id}, status code: {post_response.status_code}")
             else:
-                await update.message.reply_text(f"Error: {response.status_code}")
-        else:
-            await update.message.reply_text("Authorization token not found. Please authenticate first.")
-    elif update.callback_query:  # This condition handles the callback queries
-        query = update.callback_query
-        await query.answer()
+                print(f"Failed to fetch ads for chat_id: {chat_id}, status code: {response.status_code}")
 
-        chat_id = query.message.chat_id
-        token_auth = redis_client.get(f'access_token:{chat_id}')
-        if token_auth:
-            token_auth = token_auth.decode('utf-8')  # Decode the byte string to a standard string
-            ad_id = query.data.split(":")[1]
-            url = f"https://www.olx.kz/api/partner/adverts/{ad_id}/statistics"
-            headers = {
-                "Authorization": f"Bearer {token_auth}",
-                "Content-Type": "application/json",
-                "Version": "2.0"
-            }
-            response = requests.get(url, headers=headers)
-            if response.status_code == 200:
-                stats_data = response.json()
-                # Format and send the statistics data
-                stats_message = f"Statistics for ad {ad_id}:\n\n{stats_data}"
-                await query.message.reply_text(stats_message)
+
+async def get_statistic_for_advertise(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    chat_id = update.message.chat_id
+    token_auth = redis_client.get(f'access_token:{chat_id}')
+    if token_auth:
+        token_auth = token_auth.decode('utf-8')  # Decode the byte string to a standard string
+        url = "https://www.olx.kz/api/partner/adverts"
+        headers = {
+            "Authorization": f"Bearer {token_auth}",
+            "Content-Type": "application/json",
+            "Version": "2.0"
+        }
+        response = requests.get(url, headers=headers)
+        if response.status_code == 200:
+            ad_data = response.json().get('data', [])
+            if ad_data:
+                # Collect titles and IDs
+                ad_titles_ids = [(ad.get('title', 'N/A'), ad.get('id', 'N/A')) for ad in ad_data]
+
+                # Create buttons for each title
+                buttons = [
+                    [InlineKeyboardButton(title, callback_data=str(ad_id))]
+                    for title, ad_id in ad_titles_ids
+                ]
+
+                # Create InlineKeyboardMarkup from buttons
+                reply_markup = InlineKeyboardMarkup(buttons)
+
+                # Send the message with all buttons
+                await update.message.reply_text("Выберите объявление:", reply_markup=reply_markup)
             else:
-                await query.message.reply_text(f"Error retrieving statistics: {response.status_code}")
+                await update.message.reply_text("No advertisements found.")
+        elif response.status_code == 401:
+            auth_url = (
+                f"https://www.olx.kz/oauth/authorize/?client_id=200166&response_type=code&state=x93ld3v&scope=read"
+                f"+write+v2")
+            await update.message.reply_text(
+                f"Вы не авторизованы. Пожалуйста перейдите по ссылке:\n{auth_url}")
         else:
-            await query.message.reply_text("Authorization token not found. Please authenticate first.")
-async def validate_advert(title, description):
-    invalid_pattern = r"(.)\1\1"
-    if re.search(invalid_pattern, title) or re.search(invalid_pattern, description):
-        return False, "Title or description contains invalid repeating characters."
+            await update.message.reply_text(f"Error: {response.status_code}")
+    else:
+        auth_url = (
+            f"https://www.olx.kz/oauth/authorize/?client_id=200166&response_type=code&state=x93ld3v&scope=read"
+            f"+write+v2")
+        await update.message.reply_text(
+                f"Вы не авторизованы. Пожалуйста перейдите по ссылке:\n{auth_url}")
 
-    # Check for capital letters count
-    def capital_letter_ratio(text):
-        return sum(1 for c in text if c.isupper()) / len(text)
 
-    if capital_letter_ratio(title) > 0.5 or capital_letter_ratio(description) > 0.5:
-        return False, "Title or description contains more than 50% capital letters."
+async def get_statistic(update: Update, context: CallbackContext) -> None:
+    query = update.callback_query
+    await query.answer()
 
-    # Check title length
-    if not (16 <= len(title) <= 70):
-        return False, "Title must be between 16 and 70 characters long."
+    chat_id = query.message.chat_id
+    token_auth = redis_client.get(f'access_token:{chat_id}')
+    token_auth = token_auth.decode('utf-8')  # Decode the byte string to a standard string
 
-    # Check description length
-    if not (80 <= len(description) <= 9000):
-        return False, "Description must be between 80 and 9000 characters long."
+    # Extracting the ad_id from the callback data
+    ad_id = query.data
 
-    # Check for email addresses and phone numbers
-    email_pattern = r'\S+@\S+\.\S+'
-    phone_pattern = r'\+?\d[\d\s-]{7,}\d'
-    if re.search(email_pattern, title) or re.search(email_pattern, description):
-        return False, "Title or description contains an email address."
-    if re.search(phone_pattern, title) or re.search(phone_pattern, description):
-        return False, "Title or description contains a phone number."
+    url = f"https://www.olx.kz/api/partner/adverts/{ad_id}/statistics"
+    headers = {
+        "Authorization": f"Bearer {token_auth}",
+        "Content-Type": "application/json",
+        "Version": "2.0"
+    }
+    response = requests.get(url, headers=headers)
+    print(response.json())
+    # Parsing the response into a readable format
+    data = response.json().get('data', {})
+    advert_views = data.get('advert_views', 0)
+    phone_views = data.get('phone_views', 0)
+    users_observing = data.get('users_observing', 0)
 
-    return True, "Validation passed."
+    # Constructing the reply message
+    message = (
+        f"Просмотры объявления: {advert_views}\n"
+        f"Просмотры телефона: {phone_views}\n"
+        f"Пользователи, отслеживающие объявление: {users_observing}"
+    )
+
+    await query.message.reply_text(message)
 
 
 async def create_adv(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     chat_id = update.message.chat_id
     token_auth = redis_client.get(f'access_token:{chat_id}')
-
     if token_auth:
         token_auth = token_auth.decode('utf-8')
         data = {
@@ -265,15 +467,21 @@ async def create_adv(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None
                 "phone": 8876178672
             },
             "location": {
-                "city_id": 1671, "latitude": 45.45172, "longitude": 79.97816
+                "city_id": 1,
+                "district_id": 1
             },
             "price": {
                 "value": context.user_data['price']
             },
+            "images": [
+                {
+                    "url": context.user_data['image_url']
+                }
+            ],
             "attributes": [
                 {
                     "code": "state",
-                    "value": "used"
+                    "value": context.user_data['state']
                 },
                 {
                     "code": "brand",
@@ -281,7 +489,7 @@ async def create_adv(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None
                 },
                 {
                     "code": "diameter_inches",
-                    "value": "15"
+                    "value": context.user_data['diameter_inches']
                 },
                 {
                     "code": "quantity",
@@ -289,7 +497,7 @@ async def create_adv(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None
                 }
             ]
         }
-
+        print(data)
         url = "https://www.olx.kz/api/partner/adverts"
         headers = {
             "Authorization": f"Bearer {token_auth}",
@@ -305,40 +513,213 @@ async def create_adv(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None
         response = requests.post(url, headers=headers, json=data)
         data = response.json()
         if response.json().get("error"):
+            print(response.json())
             await context.bot.send_message(chat_id, response.json())
         else:
             advert_url = data['data']['url']
             await context.bot.send_message(chat_id, f"Advert created successfully. Your advert link is: {advert_url}")
-
-
     else:
-        await context.bot.send_message(chat_id, "Authorization token not found. Please authenticate first.")
+        auth_url = (
+            f"https://www.olx.kz/oauth/authorize/?client_id=200166&response_type=code&state=x93ld3v&scope=read"
+            f"+write+v2")
+        await update.message.reply_text(
+                f"Вы не авторизованы. Пожалуйста перейдите по ссылке:\n{auth_url}")
+
+
+async def create_advertises_by_excel(update: Update, context: CallbackContext):
+    chat_id = update.message.chat_id
+    token_auth = redis_client.get(f'access_token:{chat_id}')
+
+    if not token_auth:
+        auth_url = (
+            f"https://www.olx.kz/oauth/authorize/?client_id=200166&response_type=code&state=x93ld3v&scope=read"
+            f"+write+v2")
+        await update.message.reply_text(f"Вы не авторизованы. Пожалуйста перейдите по ссылке:\n{auth_url}")
+        return
+    await update.message.reply_text("Пожалуйста, отправьте файл Excel с данными объявлений.")
+    return FILE
+
+
+async def handle_excel_file(update: Update, context: CallbackContext):
+    chat_id = update.message.chat_id
+    token_auth = redis_client.get(f'access_token:{chat_id}')
+    token_auth = token_auth.decode('utf-8')
+    file = await update.message.document.get_file()
+    file_path = f"downloads/{file.file_id}.xlsx"
+    os.makedirs(os.path.dirname(file_path), exist_ok=True)
+    await file.download_to_drive(file_path)
+
+    df = pd.read_excel(file_path)
+    os.remove(file_path)
+
+    for index, row in df.iterrows():
+        combined_description = f"{row['Название']}\n\n{row['Описание']}"
+        data = {
+            "title": row['Название'],
+            "description": combined_description,
+            "category_id": 1459,
+            "advertiser_type": "business",
+            "contact": {
+                "name": 'mishima_test',
+                "phone": 8876178672
+            },
+            "location": {
+                "city_id": 1,
+                "district_id": 1
+            },
+            "price": {
+                "value": row['Цена']
+            },
+            "images": [
+                {
+                    "url": row['Ссылка на картинку']
+                }
+            ],
+            "attributes": [
+                {
+                    "code": "state",
+                    "value": row['Состояние']
+                },
+                {
+                    "code": "brand",
+                    "value": row['Бренд производителя']
+                },
+                {
+                    "code": "diameter_inches",
+                    "value": row['Диаметр, дюймы']
+                },
+                {
+                    "code": "profile_width_mm",
+                    "value": row['Ширина профиля, мм']
+                },
+                {
+                    "code": "seasonality",
+                    "value": row['Сезонность']
+                },
+                {
+                    "code": "thorns",
+                    "value": row['Шипы']
+                },
+                {
+                    "code": "profile_height",
+                    "value": row['Высота профиля, %']
+                }
+            ]
+        }
+        url = "https://www.olx.kz/api/partner/adverts"
+        headers = {
+            "Authorization": f"Bearer {token_auth}",
+            "Version": "2.0",
+            "Content-Type": "application/json",
+            "User-Agent": "PostmanRuntime/7.39.0",
+            "Accept": "*/*",
+            "Accept-Encoding": "gzip, deflate, br",
+            "Connection": "keep-alive"
+        }
+
+        # Send the POST request with JSON data
+        response = requests.post(url, headers=headers, json=data)
+        data = response.json()
+        if response.json().get("error"):
+            print(response.json())
+            await context.bot.send_message(chat_id, response.json())
+        else:
+            advert_url = data['data']['url']
+            await context.bot.send_message(chat_id, f"Объявление создано успешно! Ваша ссылка на объявление: {advert_url}")
 
 
 async def start(update: Update, context: CallbackContext) -> int:
-    await update.message.reply_text('Please enter the title of advertise:')
+    await update.message.reply_text('Пожалуйста, введите название объявления:')
     return FIRST
 
 
 async def first_argument(update: Update, context: CallbackContext) -> int:
     context.user_data['title'] = update.message.text
-    await update.message.reply_text('Please enter the details of advertise:')
+    await update.message.reply_text('Пожалуйста, введите описание объявления:')
     return SECOND
 
 
 async def second_argument(update: Update, context: CallbackContext) -> int:
     context.user_data['description'] = update.message.text
-    await update.message.reply_text('Please enter the price of advertise:')
+    await update.message.reply_text('Пожалуйста, введите цену объявления:')
     return THIRD
 
 
 async def third_argument(update: Update, context: CallbackContext) -> int:
     context.user_data['price'] = update.message.text
+    await update.message.reply_text('Напишите состояние колес\nНовые - new:\nИспользованные - used:')
+    return FOURTH
 
-    await create_adv(update, context)
 
-    # End conversation
-    return ConversationHandler.END
+async def fourth_argument(update: Update, context: CallbackContext) -> int:
+    context.user_data['state'] = update.message.text
+    await update.message.reply_text('Введите диаметр шины:')
+    return FIFTH
+
+
+async def fifth_argument(update: Update, context: CallbackContext) -> int:
+    context.user_data['diameter_inches'] = update.message.text
+    await update.message.reply_text('Пожалуйста, отправьте фотографию товара:')
+    return SIXTH
+
+
+async def sixth_argument(update: Update, context: CallbackContext) -> int:
+    photo = update.message.photo[-1]
+    photo_file = await photo.get_file()
+
+    # Define a local file path to save the image
+    file_path = f"downloads/{photo.file_id}.jpg"
+    os.makedirs(os.path.dirname(file_path), exist_ok=True)
+
+    # Download the file to the specified path
+    await photo_file.download_to_drive(file_path)
+
+    # Upload the image to ImgBB and get the URL
+    image_url = upload_to_imgbb(file_path)
+    context.user_data['image_url'] = image_url
+
+    # Clean up the downloaded file
+    os.remove(file_path)
+
+    await update.message.reply_text('Пожалуйста, укажите дату и время публикации в формате ДД.ММ.ГГГГ ЧЧ:ММ.')
+    return DATETIME
+
+
+async def schedule_publication(update: Update, context: CallbackContext) -> int:
+    publication_time = update.message.text
+    try:
+        scheduled_time = datetime.strptime(publication_time, '%d.%m.%Y %H:%M')
+        context.user_data['scheduled_time'] = scheduled_time
+
+        # Schedule the job
+        trigger = DateTrigger(run_date=scheduled_time)
+        scheduler.add_job(run_async, trigger, args=[create_adv, update, context])
+
+        await update.message.reply_text(f"Объявление запланировано на {scheduled_time}.")
+        return ConversationHandler.END
+    except ValueError:
+        await update.message.reply_text("Неправильный формат даты и времени. Пожалуйста, используйте ДД.ММ.ГГГГ ЧЧ:ММ.")
+        return DATETIME
+
+
+def upload_to_imgbb(file_path):
+    imgbb_api_key = '9ecf9d1a3564cf1edf1060c69eebd34f'
+    with open(file_path, 'rb') as file:
+        # Read the binary file and encode it as base64
+        encoded_image = base64.b64encode(file.read()).decode('utf-8')
+
+    response = requests.post(
+        'https://api.imgbb.com/1/upload',
+        data={
+            'key': imgbb_api_key,
+            'image': encoded_image,
+        }
+    )
+    response_data = response.json()
+    if response.status_code == 200:
+        return response_data['data']['url']
+    else:
+        raise Exception(f"Failed to upload image: {response_data}")
 
 
 async def cancel(update: Update, context: CallbackContext) -> int:

@@ -1,18 +1,35 @@
+import asyncio
+from telegram import Update
+from apscheduler.schedulers.background import BackgroundScheduler
 from flask import Flask, request, Blueprint
 from telegram import Update
-from telegram.ext import Application, CommandHandler, MessageHandler, filters, CallbackQueryHandler, \
-    ConversationHandler, filters
+from telegram.ext import Application, CommandHandler, MessageHandler, CallbackQueryHandler, \
+    ConversationHandler, filters, ContextTypes
 import requests
 import logging
 from threading import Thread
 import redis
-from service_advertise import create_adv, first_argument, second_argument, third_argument, cancel, start, get_advert_statistics
-# Import your handlers and buttons
-from handlers import (input_data, handle_action_settings, handle_action_main, save_secret_key, handle_action_advertises,
+from service_advertise import (get_statistic,
+                               first_argument,
+                               second_argument,
+                               third_argument,
+                               cancel, start,
+                               fourth_argument,
+                               fifth_argument,
+                               billing_history,
+                               packets_left,
+                               check_advertises,
+                               sixth_argument,
+                               schedule_publication,
+                               create_advertises_by_excel,
+                               handle_excel_file)
+from service_paid_features import get_paid_features
+from handlers import (handle_action_settings, handle_action_main, handle_action_advertises,
                       handle_action_olx_api)
 from buttons import start_button
 
-FIRST, SECOND, THIRD = range(3)
+FIRST, SECOND, THIRD, FOURTH, FIFTH, SIXTH, DATETIME = range(7)
+FILE = range(1)
 # Enable logging
 logging.basicConfig(
     format="%(asctime)s - %(name)s - %(levelname)s - %(message)s", level=logging.INFO
@@ -93,32 +110,50 @@ def main() -> None:
                        handle_action_settings))
     application.add_handler(
         MessageHandler(filters.TEXT & filters.Regex(
-            "^(Get my advertises|Get Advertise Statistics|Get User Information|Обратно в главную)$"),
+            "^(Все объявления|Статистика|Информация про пользователя|Обратно в главную)$"),
                        handle_action_advertises))
     application.add_handler(
-        MessageHandler(filters.TEXT & filters.Regex("^(OLX API|Secret Key Settings)$"), handle_action_main))
+        MessageHandler(filters.TEXT & filters.Regex("^(OLX API|Информация про пользователя)$"), handle_action_main))
     application.add_handler(
-        MessageHandler(filters.TEXT & filters.Regex("^(Advertises|My balance|Обратно в главную)$"),
+        MessageHandler(filters.TEXT & filters.Regex("^(Объявления|Мой баланс|Обратно в главную)$"),
                        handle_action_olx_api))
-    # application.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, input_data))
     application.add_handler(CommandHandler("start", start_button))
-    application.add_handler(CallbackQueryHandler(save_secret_key))
     conv_handler = ConversationHandler(
-        entry_points=[MessageHandler(filters.TEXT & filters.Regex("^(Create Advertise)$"),
-                                     start)],
+        entry_points=[MessageHandler(filters.TEXT & filters.Regex("^(Создать объявление)$"), start)],
         states={
             FIRST: [MessageHandler(filters.TEXT & ~filters.COMMAND, first_argument)],
             SECOND: [MessageHandler(filters.TEXT & ~filters.COMMAND, second_argument)],
             THIRD: [MessageHandler(filters.TEXT & ~filters.COMMAND, third_argument)],
+            FOURTH: [MessageHandler(filters.TEXT & ~filters.COMMAND, fourth_argument)],
+            FIFTH: [MessageHandler(filters.TEXT & ~filters.COMMAND, fifth_argument)],
+            SIXTH: [MessageHandler(filters.PHOTO, sixth_argument)],
+            DATETIME: [MessageHandler(filters.TEXT & ~filters.COMMAND, schedule_publication)]
         },
         fallbacks=[CommandHandler('cancel', cancel)]
     )
-    callback_query_handler = CallbackQueryHandler(get_advert_statistics, pattern='^select_advertise:')
+    application.add_handler(CommandHandler("get_paid_features", get_paid_features))
+    application.add_handler(MessageHandler(filters.TEXT & filters.Regex("^(История затрат)$"),
+                                           billing_history))
+    application.add_handler(MessageHandler(filters.TEXT & filters.Regex("^(Остаток пакетов)$"),
+                                           packets_left))
+    conv_handler_excel = ConversationHandler(
+        entry_points=[MessageHandler(filters.TEXT & filters.Regex("^(Создать объявления по файлу)$"),
+                                     create_advertises_by_excel)],
+        states={
+            FILE: [MessageHandler(
+                filters.Document.MimeType("application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"),
+                handle_excel_file)]
+        },
+        fallbacks=[CommandHandler('cancel', cancel)]
+    )
 
-    # Add this handler to your dispatcher
-    application.add_handler(callback_query_handler)
+    scheduler = BackgroundScheduler()
+    scheduler.add_job(check_advertises, 'interval', minutes=1, args=(Update, ContextTypes.DEFAULT_TYPE))
+    scheduler.start()
+
+    application.add_handler(conv_handler_excel)
+    application.add_handler(CallbackQueryHandler(get_statistic))
     application.add_handler(conv_handler)
-    # Start Flask app in a separate thread
     flask_thread = Thread(target=run_flask)
     flask_thread.start()
 
