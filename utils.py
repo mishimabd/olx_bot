@@ -45,7 +45,8 @@ def get_token_auth(auth_code):
         "client_id": CLIENT_ID,
         "client_secret": CLIENT_SECRET,
         "code": auth_code,
-        "scope": "v2 read write"
+        "scope": "v2 read write",
+        "redirect_uri": "http://185.4.180.8"
     }
     response = requests.post(url, headers=headers, data=data)
     if response.status_code == 200:
