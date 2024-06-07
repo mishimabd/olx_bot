@@ -87,7 +87,7 @@ async def check_my_balance(update: Update, context: ContextTypes.DEFAULT_TYPE) -
             await update.message.reply_text(message)
         elif response.status_code == 401:
             auth_url = (
-                f"https://www.olx.kz/oauth/authorize/?client_id=200166&response_type=code&state=x93ld3v&scope=read"
+                f"https://www.olx.kz/oauth/authorize/?client_id=200166&response_type=code&state=x93ld3v&scope=read&redirect_uri=https://185.4.180.8"
                 f"+write+v2")
             await update.message.reply_text(
                 f"Вы не авторизованы. Пожалуйста перейдите по ссылке:\n{auth_url}")
@@ -95,7 +95,7 @@ async def check_my_balance(update: Update, context: ContextTypes.DEFAULT_TYPE) -
             await update.message.reply_text(f"Error: {response.json()}")
     else:
         auth_url = (
-            f"https://www.olx.kz/oauth/authorize/?client_id=200166&response_type=code&state=x93ld3v&scope=read"
+            f"https://www.olx.kz/oauth/authorize/?client_id=200166&response_type=code&state=x93ld3v&scope=read&redirect_uri=https://185.4.180.8"
             f"+write+v2")
         await update.message.reply_text(
                 f"Вы не авторизованы. Пожалуйста перейдите по ссылке:\n{auth_url}")
