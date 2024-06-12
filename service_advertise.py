@@ -355,6 +355,7 @@ def check_advertises(update: Update, context: ContextTypes.DEFAULT_TYPE):
                             logging.info(message)
                             advert_id = ad.get('id', 'N/A')
                             if advert_id != 'N/A':
+                                print("Here")
                                 # post_url = f"https://www.olx.kz/api/partner/adverts/{advert_id}/paid-features"
                                 # post_body = {
                                 #     "payment_method": "account",
@@ -367,17 +368,17 @@ def check_advertises(update: Update, context: ContextTypes.DEFAULT_TYPE):
                                 # else:
                                 #     logging.error(
                                 #         f"Failed to send paid feature request for advert ID: {advert_id}, status code: {post_response.status_code}")
-                                post_url = f"https://www.olx.kz/api/partner/adverts/{advert_id}/commands"
-                                post_body = {
-                                    "command": "refresh"
-                                }
-                                post_response = requests.post(post_url, headers=headers, json=post_body)
-                                print(post_response.json())
-                                if post_response.status_code == 200:
-                                    logging.info(f"Successfully refreshed advert ID: {advert_id}")
-                                else:
-                                    logging.error(
-                                        f"Failed to send paid feature request for advert ID: {advert_id}, status code: {post_response.status_code}")
+                                # post_url = f"https://www.olx.kz/api/partner/adverts/{advert_id}/commands"
+                                # post_body = {
+                                #     "command": "refresh"
+                                # }
+                                # post_response = requests.post(post_url, headers=headers, json=post_body)
+                                # print(post_response.json())
+                                # if post_response.status_code == 200:
+                                #     logging.info(f"Successfully refreshed advert ID: {advert_id}")
+                                # else:
+                                #     logging.error(
+                                #         f"Failed to send paid feature request for advert ID: {advert_id}, status code: {post_response.status_code}")
             else:
                 print(f"Failed to fetch ads for chat_id: {chat_id}, status code: {response.status_code}")
 
