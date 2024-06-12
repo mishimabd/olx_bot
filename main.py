@@ -98,7 +98,7 @@ app.register_blueprint(oauth_blueprint)
 
 
 def run_flask():
-    app.run(host='0.0.0.0', port=80)
+    app.run(host='0.0.0.0', port=8080)
 
 
 def main() -> None:
