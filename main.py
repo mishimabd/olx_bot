@@ -148,7 +148,7 @@ def main() -> None:
     )
 
     scheduler = BackgroundScheduler()
-    scheduler.add_job(check_advertises, 'interval', houres=1, args=(Update, ContextTypes.DEFAULT_TYPE))
+    scheduler.add_job(check_advertises, 'interval', hours=1, args=(Update, ContextTypes.DEFAULT_TYPE))
     scheduler.start()
 
     application.add_handler(conv_handler_excel)
