@@ -16,7 +16,7 @@ from telegram.ext import ContextTypes, CallbackContext, Application, CommandHand
 import utils
 scheduler = BackgroundScheduler()
 scheduler.start()
-redis_client = redis.StrictRedis(host='185.4.180.8', port=6379, db=0)
+redis_client = redis.StrictRedis(host='localhost', port=6379, db=0)
 
 token_client = utils.get_token_client()
 
@@ -162,40 +162,41 @@ async def get_my_advertises(update: Update, context: ContextTypes.DEFAULT_TYPE) 
         if response.status_code == 200:
             ad_data = response.json().get('data', [])
             if ad_data:
-                for ad in ad_data:
-                    ad_title = ad.get('title', 'N/A')
-                    ad_description = ad.get('description', 'N/A')
-                    ad_price_value = ad.get('price', {}).get('value', 'N/A')
-                    ad_price_currency = ad.get('price', {}).get('currency', 'N/A')
-                    ad_category_id = ad.get('category_id', 'N/A')
-                    ad_contact_name = ad.get('contact', {}).get('name', 'N/A')
-                    ad_contact_phone = ad.get('contact', {}).get('phone', 'N/A')
-                    ad_location_city_id = ad.get('location', {}).get('city_id', 'N/A')
-                    ad_created_at = ad.get('created_at', 'N/A')
-                    ad_valid_to = ad.get('valid_to', 'N/A')
-                    ad_url = ad.get('url', 'N/A')
+                active_ads = [ad for ad in ad_data if ad.get('status') == 'active']
+                if active_ads:
+                    for ad in active_ads:
+                        ad_title = ad.get('title', 'N/A')
+                        ad_description = ad.get('description', 'N/A')
+                        ad_price_value = ad.get('price', {}).get('value', 'N/A')
+                        ad_price_currency = ad.get('price', {}).get('currency', 'N/A')
+                        ad_contact_name = ad.get('contact', {}).get('name', 'N/A')
+                        ad_created_at = ad.get('created_at', 'N/A')
+                        ad_valid_to = ad.get('valid_to', 'N/A')
+                        ad_url = ad.get('url', 'N/A')
 
-                    images = ad.get('images', [])
-                    ad_image_url = images[0].get('url', '') if images else ''
+                        images = ad.get('images', [])
+                        ad_image_url = images[0].get('url', '') if images else ''
 
-                    message = (
-                        f"Название: {ad_title}\n"
-                        f"Описание: {ad_description}\n"
-                        f"Цена вашего объявления: {ad_price_value} {ad_price_currency}\n"
-                        f"Автор объявления: {ad_contact_name}\n"
-                        f"Создано: {ad_created_at}\n"
-                        f"Срок до: {ad_valid_to}\n"
-                        f"Ссылка: {ad_url}\n"
-                    )
+                        message = (
+                            f"Название: {ad_title}\n"
+                            f"Описание: {ad_description}\n"
+                            f"Цена вашего объявления: {ad_price_value} {ad_price_currency}\n"
+                            f"Автор объявления: {ad_contact_name}\n"
+                            f"Создано: {ad_created_at}\n"
+                            f"Срок до: {ad_valid_to}\n"
+                            f"Ссылка: {ad_url}\n"
+                        )
 
-                    if ad_image_url:
-                        image_response = requests.get(ad_image_url)
-                        if image_response.status_code == 200:
-                            await context.bot.send_photo(chat_id=chat_id, photo=image_response.content, caption=message)
+                        if ad_image_url:
+                            image_response = requests.get(ad_image_url)
+                            if image_response.status_code == 200:
+                                await context.bot.send_photo(chat_id=chat_id, photo=image_response.content, caption=message)
+                            else:
+                                await update.message.reply_text("Failed to load image, here are the details:\n" + message)
                         else:
-                            await update.message.reply_text("Failed to load image, here are the details:\n" + message)
-                    else:
-                        await update.message.reply_text("Нет картинки\n" + message)
+                            await update.message.reply_text("Нет картинки\n" + message)
+                else:
+                    await update.message.reply_text("Активные объявления не найдены.")
             else:
                 await update.message.reply_text("Не найдено.")
         elif response.status_code == 401:
@@ -212,7 +213,6 @@ async def get_my_advertises(update: Update, context: ContextTypes.DEFAULT_TYPE) 
             f"+write+v2")
         await update.message.reply_text(
                 f"Вы не авторизованы. Пожалуйста перейдите по ссылке:\n{auth_url}")
-
 
 async def billing_history(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     chat_id = update.message.chat_id
@@ -344,7 +344,7 @@ def check_advertises(update: Update, context: ContextTypes.DEFAULT_TYPE):
                     for ad in ad_data:
                         ad_valid_to = ad.get('valid_to', 'N/A')
                         ad_valid_to_dt = datetime.strptime(ad_valid_to, '%Y-%m-%d %H:%M:%S')
-                        if datetime.now(ad_valid_to_dt.tzinfo) + timedelta(days=25) >= ad_valid_to_dt:
+                        if datetime.now(ad_valid_to_dt.tzinfo) + timedelta(days=20) >= ad_valid_to_dt:
                             message = (
                                 f"Айди: {ad.get('id', 'N/A')}\n"
                                 f"Название: {ad.get('title', 'N/A')}\n"
@@ -353,19 +353,31 @@ def check_advertises(update: Update, context: ContextTypes.DEFAULT_TYPE):
                                 f"Ссылка: {ad.get('url', 'N/A')}\n"
                             )
                             logging.info(message)
-                            # advert_id = ad.get('id', 'N/A')
-                            # if advert_id != 'N/A':
-                            #     post_url = f"https://www.olx.kz/api/partner/adverts/{advert_id}/paid-features"
-                            #     post_body = {
-                            #         "payment_method": "account",
-                            #         "code": "pushup"
-                            #     }
-                            #     post_response = requests.post(post_url, headers=headers, json=post_body)
-                            #     if post_response.status_code == 200:
-                            #         logging.info(f"Successfully sent paid feature request for advert ID: {advert_id}")
-                            #     else:
-                            #         logging.error(
-                            #             f"Failed to send paid feature request for advert ID: {advert_id}, status code: {post_response.status_code}")
+                            advert_id = ad.get('id', 'N/A')
+                            if advert_id != 'N/A':
+                                # post_url = f"https://www.olx.kz/api/partner/adverts/{advert_id}/paid-features"
+                                # post_body = {
+                                #     "payment_method": "account",
+                                #     "code": "pushup"
+                                # }
+                                # post_response = requests.post(post_url, headers=headers, json=post_body)
+                                # print(post_response.json())
+                                # if post_response.status_code == 200:
+                                #     logging.info(f"Successfully sent paid feature request for advert ID: {advert_id}")
+                                # else:
+                                #     logging.error(
+                                #         f"Failed to send paid feature request for advert ID: {advert_id}, status code: {post_response.status_code}")
+                                post_url = f"https://www.olx.kz/api/partner/adverts/{advert_id}/commands"
+                                post_body = {
+                                    "command": "refresh"
+                                }
+                                post_response = requests.post(post_url, headers=headers, json=post_body)
+                                print(post_response.json())
+                                if post_response.status_code == 200:
+                                    logging.info(f"Successfully refreshed advert ID: {advert_id}")
+                                else:
+                                    logging.error(
+                                        f"Failed to send paid feature request for advert ID: {advert_id}, status code: {post_response.status_code}")
             else:
                 print(f"Failed to fetch ads for chat_id: {chat_id}, status code: {response.status_code}")
 
