@@ -51,7 +51,7 @@ async def help_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> No
 
 async def check_my_balance(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     chat_id = update.message.chat_id
-    token_auth = redis_client.get(f'access_token:{chat_id}')
+    token_auth = redis_client.get(f'access_token')
 
     if token_auth:
         token_auth = token_auth.decode('utf-8')  # Decode the byte string to a standard string
@@ -103,7 +103,7 @@ async def check_my_balance(update: Update, context: ContextTypes.DEFAULT_TYPE) -
 
 async def get_authenticated_user(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     chat_id = update.message.chat_id
-    token_auth = redis_client.get(f'access_token:{chat_id}')
+    token_auth = redis_client.get(f'access_token')
 
     if token_auth:
         token_auth = token_auth.decode('utf-8')  # Decode the byte string to a standard string
@@ -148,7 +148,7 @@ async def get_authenticated_user(update: Update, context: ContextTypes.DEFAULT_T
 
 async def get_my_advertises(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     chat_id = update.message.chat_id
-    token_auth = redis_client.get(f'access_token:{chat_id}')
+    token_auth = redis_client.get(f'access_token')
     print(token_auth)
     if token_auth:
         token_auth = token_auth.decode('utf-8')  # Decode the byte string to a standard string
@@ -216,7 +216,7 @@ async def get_my_advertises(update: Update, context: ContextTypes.DEFAULT_TYPE) 
 
 async def billing_history(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     chat_id = update.message.chat_id
-    token_auth = redis_client.get(f'access_token:{chat_id}')
+    token_auth = redis_client.get(f'access_token')
 
     if token_auth:
         token_auth = token_auth.decode('utf-8')  # Decode the byte string to a standard string
@@ -272,7 +272,7 @@ async def billing_history(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
 
 async def packets_left(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     chat_id = update.message.chat_id
-    token_auth = redis_client.get(f'access_token:{chat_id}')
+    token_auth = redis_client.get(f'access_token')
 
     if token_auth:
         token_auth = token_auth.decode('utf-8')  # Decode the byte string to a standard string
@@ -325,7 +325,7 @@ async def packets_left(update: Update, context: ContextTypes.DEFAULT_TYPE) -> No
 
 
 def check_advertises(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    chat_ids = redis_client.keys('access_token:*')
+    chat_ids = redis_client.keys('access_token')
     for chat_id_key in chat_ids:
         chat_id = chat_id_key.split(b':')[1].decode('utf-8')
         token_auth = redis_client.get(chat_id_key)
@@ -384,10 +384,9 @@ def check_advertises(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 
 async def get_statistic_for_advertise(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
-    chat_id = update.message.chat_id
-    token_auth = redis_client.get(f'access_token:{chat_id}')
+    token_auth = redis_client.get(f'access_token')
     if token_auth:
-        token_auth = token_auth.decode('utf-8')  # Decode the byte string to a standard string
+        token_auth = token_auth.decode('utf-8')
         url = "https://www.olx.kz/api/partner/adverts"
         headers = {
             "Authorization": f"Bearer {token_auth}",
@@ -433,9 +432,7 @@ async def get_statistic_for_advertise(update: Update, context: ContextTypes.DEFA
 async def get_statistic(update: Update, context: CallbackContext) -> None:
     query = update.callback_query
     await query.answer()
-
-    chat_id = query.message.chat_id
-    token_auth = redis_client.get(f'access_token:{chat_id}')
+    token_auth = redis_client.get(f'access_token')
     token_auth = token_auth.decode('utf-8')  # Decode the byte string to a standard string
 
     # Extracting the ad_id from the callback data
@@ -467,7 +464,7 @@ async def get_statistic(update: Update, context: CallbackContext) -> None:
 
 async def create_adv(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     chat_id = update.message.chat_id
-    token_auth = redis_client.get(f'access_token:{chat_id}')
+    token_auth = redis_client.get(f'access_token')
     if token_auth:
         token_auth = token_auth.decode('utf-8')
         data = {
@@ -541,7 +538,7 @@ async def create_adv(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None
 
 async def create_advertises_by_excel(update: Update, context: CallbackContext):
     chat_id = update.message.chat_id
-    token_auth = redis_client.get(f'access_token:{chat_id}')
+    token_auth = redis_client.get(f'access_token')
 
     if not token_auth:
         auth_url = (
@@ -555,7 +552,7 @@ async def create_advertises_by_excel(update: Update, context: CallbackContext):
 
 async def handle_excel_file(update: Update, context: CallbackContext):
     chat_id = update.message.chat_id
-    token_auth = redis_client.get(f'access_token:{chat_id}')
+    token_auth = redis_client.get(f'access_token')
     token_auth = token_auth.decode('utf-8')
     file = await update.message.document.get_file()
     file_path = f"downloads/{file.file_id}.xlsx"
