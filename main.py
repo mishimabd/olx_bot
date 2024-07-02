@@ -1,8 +1,4 @@
-import asyncio
 import logging
-from apscheduler.schedulers.background import BackgroundScheduler
-from telegram import Update
-from telegram.ext import Application, CommandHandler, MessageHandler, CallbackQueryHandler, ConversationHandler, filters
 import requests
 import redis
 from urllib.parse import urlparse, parse_qs
@@ -10,6 +6,9 @@ from selenium import webdriver
 from selenium.webdriver.common.by import By
 from selenium.webdriver.common.keys import Keys
 from time import sleep
+from telegram import Update
+from telegram.ext import Application, CommandHandler, MessageHandler, CallbackQueryHandler, ConversationHandler, filters
+from apscheduler.schedulers.background import BackgroundScheduler
 from service_advertise import (
     get_statistic,
     first_argument,
@@ -62,7 +61,12 @@ redis_client = redis.StrictRedis(host='localhost', port=6379, db=0)
 
 # Function to get OAuth code using Selenium
 def get_oauth_code(username, password):
-    driver = webdriver.Chrome()
+    options = webdriver.ChromeOptions()
+    options.add_argument('--headless')  # Run Chrome in headless mode
+    options.add_argument('--no-sandbox')
+    options.add_argument('--disable-dev-shm-usage')
+
+    driver = webdriver.Chrome(options=options)
 
     page_for_auth = f"{AUTH_URL}?client_id={CLIENT_ID}&response_type=code&state=x93ld3v&scope=read+write+v2"
     driver.get(page_for_auth)
@@ -73,6 +77,7 @@ def get_oauth_code(username, password):
     p = driver.find_element(By.NAME, "password")
     p.send_keys(password)
     p.send_keys(Keys.RETURN)
+
     try:
         sleep(10)
         dang_this_cookie = driver.find_element(By.XPATH, '//*[@id="cookiesBar"]/a')
@@ -174,7 +179,7 @@ def main():
                 # Use a valid chat ID where you want to send the message
                 chat_id = "1924374737"
                 application.bot.send_message(chat_id=chat_id,
-                                                   text=f'Authorization successful! Access token: {access_token}')
+                                             text=f'Authorization successful! Access token: {access_token}')
             else:
                 logger.error('Access token not found in the response.')
         else:
