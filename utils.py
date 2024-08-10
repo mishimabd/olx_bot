@@ -26,6 +26,7 @@ def get_token_client():
     }
     response = requests.post(url, headers=headers, data=data)
     if response.status_code == 200:
+        print(response.json().get("access_token"))
         return response.json().get("access_token")
     else:
         print(f"Error: Failed to obtain access token. Status code: {response.status_code}, Content: {response.content}")
@@ -46,7 +47,6 @@ def get_token_auth(auth_code):
         "client_secret": CLIENT_SECRET,
         "code": auth_code,
         "scope": "v2 read write",
-        "redirect_uri": "http://185.4.180.8"
     }
     response = requests.post(url, headers=headers, data=data)
     if response.status_code == 200:
@@ -64,3 +64,25 @@ def get_code_for_auth():
            f"&state=some_state_value")
     print(f"Please visit the following URL to authorize the application: {url}")
     return input("Enter the authorization code from the URL: ")
+
+
+def refresh_token():
+    url = "https://www.olx.kz/api/open/oauth/token"
+    headers = {
+        "Content-Type": "application/x-www-form-urlencoded",
+        "Accept": "*/*",
+        "Accept-Encoding": "gzip, deflate, br",
+        "Connection": "keep-alive"
+    }
+    data = {
+        "grant_type": "refresh_token",
+        "client_id": CLIENT_ID,
+        "client_secret": CLIENT_SECRET,
+        "refresh_token": "03682093f606d3ab3accaef82038ac54bfba6a99",
+    }
+    response = requests.post(url, headers=headers, data=data)
+    if response.status_code == 200:
+        return response.json().get("access_token")
+    else:
+        print(f"Error: Failed to obtain access token. Status code: {response.status_code}, Content: {response.content}")
+        return None
